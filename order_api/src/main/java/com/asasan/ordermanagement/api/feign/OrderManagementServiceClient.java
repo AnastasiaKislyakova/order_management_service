@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.List;
 
-@FeignClient("${order.management.service.name}/orders")
+@FeignClient("${order.management.service.name}/api/orders")
 public interface OrderManagementServiceClient extends OrderManagementServiceApi {
 
     @GetMapping()
