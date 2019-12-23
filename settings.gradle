@@ -1,4 +1,5 @@
 rootProject.name = 'order'
 include 'order_app'
 include 'order_api'
+include 'order-queue'
 

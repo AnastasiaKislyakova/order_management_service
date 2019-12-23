@@ -11,4 +11,5 @@ public interface OrderManagementServiceApi {
     OrderDto getOrderById(int orderId);
     OrderDto changeOrderStatus(int orderId, OrderStatus status);
     OrderDto addItemToOrder(Integer orderId, ItemAdditionParametersDto parametersDto);
+    OrderDto addItemToOrder(ItemAdditionParametersDto parametersDto);
 }

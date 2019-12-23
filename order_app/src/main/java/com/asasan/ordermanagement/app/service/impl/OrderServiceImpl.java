@@ -4,6 +4,7 @@ import com.asasan.ordermanagement.api.dto.ItemAdditionParametersDto;
 import com.asasan.ordermanagement.api.dto.ItemDto;
 import com.asasan.ordermanagement.api.dto.OrderDto;
 import com.asasan.ordermanagement.api.dto.OrderStatus;
+import com.asasan.ordermanagement.api.feign.OrderManagementServiceClient;
 import com.asasan.ordermanagement.app.dto.CreateOrderDto;
 import com.asasan.ordermanagement.app.entity.OrderEntity;
 import com.asasan.ordermanagement.app.entity.OrderItemEntity;
@@ -11,6 +12,7 @@ import com.asasan.ordermanagement.app.repository.OrderItemRepository;
 import com.asasan.ordermanagement.app.repository.OrderRepository;
 import com.asasan.ordermanagement.app.service.OrderService;
 import com.asasan.ordermanagement.app.util.Streams;
+import com.asasan.warehousemanagement.api.feign.WarehouseManagementServiceClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,11 +29,15 @@ public class OrderServiceImpl implements OrderService {
     private OrderRepository orderRepository;
 
     private OrderItemRepository orderItemRepository;
+    private WarehouseManagementServiceClient warehouseClient;
 
     @Autowired
-    public OrderServiceImpl(OrderRepository orderRepository, OrderItemRepository orderItemRepository) {
+    public OrderServiceImpl(OrderRepository orderRepository,
+                            OrderItemRepository orderItemRepository,
+                            WarehouseManagementServiceClient warehouseClient) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.warehouseClient = warehouseClient;
     }
 
     @Override
@@ -45,32 +51,41 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderDto getOrderById(int orderId) {
         logger.info("looking for an order by id {}", orderId);
-        OrderEntity foundOrder = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("There is no such order in database"));
-        return getOrderDto(foundOrder);
+        return orderRepository.findById(orderId)
+                .map(this::getOrderDto)
+                .orElse(null);
     }
 
     @Override
     public OrderDto changeOrderStatus(int orderId, OrderStatus status) {
-        OrderEntity order =  orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("There is no such order in database"));
+        OrderEntity order = orderRepository.findById(orderId)
+                .orElse(null);
+        if (order == null) return null;
         order.setStatus(status);
-        orderRepository.save(order);
 
+        if (status == OrderStatus.FAILED || status == OrderStatus.CANCELLED) {
+            List<OrderItemEntity> foundOrderItems = orderItemRepository.findAllByOrderId(order.getOrderId());
+            Streams.of(foundOrderItems)
+                    .map((item) -> warehouseClient.changeItemAmount(item.getItemId(), item.getAmount()));
+        }
+        orderRepository.save(order);
         return order.toOrderDto();
     }
 
     @Override
     public OrderDto addItemToOrder(Integer orderId, ItemAdditionParametersDto parametersDto) {
 
-        ItemDto item = new ItemDto();
-        //check if item with this id exists
-        item.setId(parametersDto.getId());
-        item.setAmount(parametersDto.getAmount());
-        item.setName("Default item name"); //get name of item with this id
-        item.setPrice(2); //get price of item with this id
+        ItemDto item = convertItemDto(warehouseClient.getItemById(parametersDto.getId()));
+        if (item == null) {
+            return null;
+        }
+
+        if (item.getAmount() < parametersDto.getAmount()) {
+            return null;
+        }
 
         if (orderId == null) {
+            warehouseClient.changeItemAmount(item.getId(), -parametersDto.getAmount());
             CreateOrderDto createOrderDto = new CreateOrderDto();
             createOrderDto.setTotalAmount(parametersDto.getAmount());
             createOrderDto.setTotalCost(item.getPrice() * item.getAmount());
@@ -90,23 +105,22 @@ public class OrderServiceImpl implements OrderService {
             return orderDto;
 
         } else {
-            OrderEntity order =  orderRepository.findById(orderId)
-                    .orElseThrow(() -> new IllegalArgumentException("There is no such order in database"));
-
-            try {
-                //if record with these orderId and itemId exists
-                OrderItemEntity orderItem = orderItemRepository.findByOrderIdAndItemId(order.getOrderId(), item.getId());
-                orderItem.setAmount(orderItem.getAmount() + item.getAmount());
-                orderItemRepository.save(orderItem);
-                order.setTotalAmount(order.getTotalAmount() + item.getAmount());
-                order.setTotalCost(order.getTotalCost() + item.getAmount() * item.getPrice());
-            }catch (Exception e){
-                //else create the record
-                OrderItemEntity orderItem = new OrderItemEntity(item, order.getOrderId());
-                orderItemRepository.save(orderItem);
-                order.setTotalAmount(order.getTotalAmount() + item.getAmount());
-                order.setTotalCost(order.getTotalCost() + item.getAmount() * item.getPrice());
+            OrderEntity order = orderRepository.findById(orderId)
+                    .orElse(null);
+            if (order == null) {
+                return null;
             }
+
+            warehouseClient.changeItemAmount(item.getId(), -parametersDto.getAmount());
+
+            OrderItemEntity orderItem = orderItemRepository.findByOrderIdAndItemId(order.getOrderId(), item.getId());
+            if (orderItem == null) {
+                orderItem = new OrderItemEntity(item, order.getOrderId());
+            }
+            orderItem.setAmount(orderItem.getAmount() + parametersDto.getAmount());
+            orderItemRepository.save(orderItem);
+            order.setTotalAmount(order.getTotalAmount() + parametersDto.getAmount());
+            order.setTotalCost(order.getTotalCost() + parametersDto.getAmount() * item.getPrice());
             orderRepository.save(order);
 
             return getOrderDto(order);
@@ -122,6 +136,16 @@ public class OrderServiceImpl implements OrderService {
         OrderDto orderDto = order.toOrderDto();
         orderDto.setItems(orderItems);
         return orderDto;
+    }
+
+    private ItemDto convertItemDto(com.asasan.warehousemanagement.api.dto.ItemDto itemDto) {
+        if (itemDto == null) return null;
+        ItemDto item = new ItemDto();
+        item.setId(itemDto.getId());
+        item.setPrice(itemDto.getPrice());
+        item.setAmount(itemDto.getAmount());
+        item.setName(itemDto.getName());
+        return item;
     }
 
 

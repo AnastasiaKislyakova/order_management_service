@@ -5,6 +5,7 @@ import com.asasan.ordermanagement.api.dto.OrderDto;
 import com.asasan.ordermanagement.api.dto.OrderStatus;
 import com.asasan.ordermanagement.app.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,33 +21,43 @@ public class OrderController {
     }
 
     @GetMapping(value = "{orderId}")
-    OrderDto getOrderById(@PathVariable int orderId) {
-        return orderService.getOrderById(orderId);
+    ResponseEntity<OrderDto> getOrderById(@PathVariable int orderId) {
+        OrderDto orderById = orderService.getOrderById(orderId);
+        if (orderById == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(orderById);
     }
 
     @GetMapping
     List<OrderDto> getOrders() { return orderService.getOrders(); }
 
     @PutMapping(value = "{orderId}/status/{status}")
-    OrderDto changeOrderStatus(@PathVariable int orderId, @PathVariable OrderStatus status){
-        return orderService.changeOrderStatus(orderId, status);
+    ResponseEntity<OrderDto> changeOrderStatus(@PathVariable int orderId, @PathVariable OrderStatus status){
+        OrderDto orderDto = orderService.changeOrderStatus(orderId, status);
+        if (orderDto == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(orderDto);
     }
 
     @PostMapping(value = "{orderId}/item")
-    OrderDto addItemToOrder(@PathVariable Integer orderId, @RequestBody ItemAdditionParametersDto parametersDto){
-        return orderService.addItemToOrder(orderId, parametersDto);
+    ResponseEntity<OrderDto> addItemToOrder(@PathVariable Integer orderId,
+                                            @RequestBody ItemAdditionParametersDto parametersDto){
+        OrderDto orderDto = orderService.addItemToOrder(orderId, parametersDto);
+        if (orderDto == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(orderDto);
     }
 
     @PostMapping(value = "/item")
-    OrderDto addItemToOrder(@RequestBody ItemAdditionParametersDto parametersDto){
-        return orderService.addItemToOrder(null, parametersDto);
+    ResponseEntity<OrderDto> addItemToOrder(@RequestBody ItemAdditionParametersDto parametersDto){
+        OrderDto orderDto = orderService.addItemToOrder(null, parametersDto);
+        if (orderDto == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(orderDto);
     }
 
-
-
-//    @PostMapping
-//    @ResponseStatus(HttpStatus.CREATED)
-//    OrderDto createUser(@Valid @RequestBody CreateOrderDto createOrderDto) {
-//        return orderService.createOrder(createOrderDto);
-//    }
 }

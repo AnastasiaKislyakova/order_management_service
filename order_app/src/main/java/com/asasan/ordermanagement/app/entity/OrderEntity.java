@@ -25,9 +25,9 @@ public class OrderEntity {
     @Enumerated(value = EnumType.STRING)
     private OrderStatus status = OrderStatus.COLLECTING;
 
-    private long totalCost;
+    private long totalCost = 0;
 
-    private int totalAmount;
+    private int totalAmount = 0;
 
     private String userName;
 
